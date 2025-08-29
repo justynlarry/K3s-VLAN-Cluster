@@ -1,4 +1,4 @@
-Small K3s Cluster on Two Laptops Using OPNsense and VLAN 10 -> Exposing Web-Page through a Cloudflare Tunnel
+# Setting up a Small K3s Cluster on Two Laptops Using OPNsense and VLAN 10 -> Exposing Web-Page through a Cloudflare Tunnel
 
 ![Proxmox](https://img.shields.io/badge/Proxmox-ED1C24?style=for-the-badge&logo=proxmox&logoColor=white) 
 ![OPNsense](https://img.shields.io/badge/OPNsense-EF4F1A?style=for-the-badge&logo=opnsense&logoColor=white)
