@@ -159,27 +159,30 @@ Ubuntu VM	  10.0.10.60	   10.0.10.1	10.0.10.1
 
 # Lessons Learned / Gotchas
 
-Proxmox resets bridge-pvid on restart; handle untagging at the switch instead.
-
-Verify physical port VLAN membership and PVID before touching Proxmox bridge settings.
-
-Exclude management VLAN ports from VLAN 1 to avoid conflicts.
+- Proxmox resets bridge-pvid on restart; handle untagging at the switch instead.
+- Verify physical port VLAN membership and PVID before touching Proxmox bridge settings.
+- Exclude management VLAN ports from VLAN 1 to avoid conflicts.
 
 
-On debGold:
 
-Set Environment Variables:
+# Setting Up the K3s Cluster On Two Computers:
 
-Bash
+On Primary (Where Master Node will be set up):
+
+1. Set Environment Variables:
+
+```Bash
 
 export VIP_IP="10.0.10.90"
 export NODE_IP="10.0.10.50"
 export TOKEN="SuperSecretToken123"
-export INTERFACE="enp8s0" 
-Install K3s Master:
-This command downloads and installs K3s with the custom flags required for a manual CNI (Calico) setup. It also initializes the cluster and sets the node-ip.
+export INTERFACE="enp8s0"
+```
 
-Bash
+2. Install K3s Master:
+- This command downloads and installs K3s with the custom flags required for a manual CNI (Calico) setup. It also initializes the cluster and sets the node-ip.
+
+```Bash
 
 curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="\
   --cluster-init \
@@ -194,10 +197,11 @@ curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="\
   --node-ip $NODE_IP \
   --node-external-ip $NODE_IP" \
   sh -s - server
-Generate the kube-vip Manifest:
-This command uses the kube-vip Docker image to generate a YAML manifest file that we will manually apply.
+```
+3. Generate the kube-vip Manifest:
+- This command uses the kube-vip Docker image to generate a YAML manifest file that we will manually apply.
 
-Bash
+```Bash
 
 sudo docker run --network host --rm ghcr.io/kube-vip/kube-vip:v0.7.0 \
   manifest daemonset \
@@ -208,55 +212,63 @@ sudo docker run --network host --rm ghcr.io/kube-vip/kube-vip:v0.7.0 \
   --vip $VIP_IP \
   --taint \
   > /home/gold-user/kube-vip.yaml
-Manually Apply the Manifest:
-This applies the kube-vip manifest directly to the running cluster, which ensures it is created. Wait 30 seconds for the pod to start.
+```
+4. Manually Apply the Manifest:
+- This applies the kube-vip manifest directly to the running cluster, which ensures it is created. Wait 30 seconds for the pod to start.
 
-Bash
+```Bash
 
 sudo kubectl apply -f /home/gold-user/kube-vip.yaml
-Verify kube-vip is Running and the VIP is Active:
+```
+5. Verify kube-vip is Running and the VIP is Active:
 
-Bash
+```Bash
 
 # Check for the running pod (Status should be "Running")
 sudo kubectl -n kube-system get pods -l app=kube-vip-cloud-provider
 
 # Check that the VIP is listed on the interface
 ip addr show $INTERFACE
-You should see inet 10.0.10.90 listed as an IP on the interface.
+```
+* You should see inet 10.0.10.90 listed as an IP on the interface.
 
-Phase 2: CNI (Calico) Installation (debGold)
+# Phase 2: CNI (Calico) Installation (debGold)
 The cluster is now installed but is in a non-functional state, waiting for a network plugin. This is the expected and correct behavior. The Calico CNI will provide network connectivity for all pods.
 
-On debGold:
+On Primary:
 
-Apply the Calico Manifest:
+1. Apply the Calico Manifest:
 
-Bash
+```Bash
 
 sudo kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/calico.yaml
-Verify Master Node Status:
-Wait a minute or two for Calico to deploy its pods. The master node status should change to Ready.
+```
+2. Verify Master Node Status:
+- Wait a minute or two for Calico to deploy its pods. The master node status should change to Ready.
 
-Bash
+```Bash
 
 sudo kubectl get nodes
-Phase 3: Worker Node Installation (debBlue)
+```
+
+# Phase 3: Worker Node Installation (debBlue)
 Now that the master node is fully configured and operational, you can connect the worker node. We will use the master's private host IP (10.0.10.50) instead of the VIP, which was a point of failure in our troubleshooting.
 
-On debBlue:
+On Secondary (computer hosting worker node):
 
-Set Environment Variables:
+1. Set Environment Variables:
 
-Bash
+```Bash
 
 export MASTER_IP="10.0.10.50"
 export NODE_IP="10.0.10.70"
 export TOKEN="SuperSecretToken123"
-Install the K3s Agent:
-This command joins the node to the cluster. Crucially, it includes the same --disable-network-policy and --flannel-backend=none flags as the master to avoid a critical configuration mismatch.
+```
 
-Bash
+2. Install the K3s Agent:
+This command joins the node to the cluster. Crucially, it includes the same ```--disable-network-policy``` and ```--flannel-backend=none``` flags as the master to avoid a critical configuration mismatch.
+
+```Bash
 
 curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="\
   --server https://$MASTER_IP:6443 \
@@ -266,24 +278,28 @@ curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="\
   --disable-network-policy \
   --flannel-backend=none" \
   sh -s - agent
-Verify Cluster Status:
-Go back to the master node (debGold) and check the status of both nodes.
+```
 
-Bash
+3. Verify Cluster Status:
+Go back to the master node (Master) and check the status of both nodes.
 
-# On debGold:
+```Bash
+
+# On Master:
 sudo kubectl get nodes
-Both debgold and debblue should now be in a Ready state.
+```
 
-Phase 4: Ingress and Cloudflare Tunnel
+* Both debgold and debblue should now be in a Ready state.
+
+# Phase 4: Ingress and Cloudflare Tunnel
 This final phase sets up a secure and production-ready way to expose your applications without opening any ports on your firewall.
 
 On debGold:
 
-Install Nginx Ingress Controller:
+1. Install Nginx Ingress Controller:
 This will handle all incoming HTTP/HTTPS traffic from the internet.
 
-Bash
+```Bash
 
 sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm repo update
@@ -291,89 +307,167 @@ sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm install ingress-nginx ingress-ngi
   --namespace ingress-nginx \
   --create-namespace \
   --set controller.service.type=ClusterIP
-Install and Configure the Cloudflare Tunnel:
+```
+
+2. Install and Configure the Cloudflare Tunnel:
 This creates an encrypted tunnel from your master node to Cloudflare's network.
 
-Install cloudflared:
+- Install cloudflared:
 
-Bash
+- Any Debian Based Distribution (other distributions can be found at: https://pkg.cloudflare.com/index.html )
+```Bash
+# Add cloudflare gpg key
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
 
-curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloudflare-main.gpg
-echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
+# Add this repo to your apt repositories
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+
+# install cloudflared
 sudo apt-get update && sudo apt-get install cloudflared
-Log in and create the tunnel (follow the on-screen instructions):
+```
+- Log in and create the tunnel (follow the on-screen instructions):
 
-Bash
+```Bash
 
 cloudflared tunnel login
 cloudflared tunnel create k3s-tunnel
-Create the config file (nano /etc/cloudflared/config.yml):
-(Replace <YOUR_TUNNEL_ID> with the ID from the previous command)
+```
 
-YAML
+Create the config file (```nano /etc/cloudflared/config.yml```):
+(Replace ```<YOUR_TUNNEL_ID>``` with the ID from the previous command)
+
+
+```YAML
 
 tunnel: <YOUR_TUNNEL_ID>
 credentials-file: /home/gold-user/.cloudflared/<YOUR_TUNNEL_ID>.json
 ingress:
-  - hostname: hello.sr-one.net
+  - hostname: <CNAME>.<DOMAIN_NAME>
     service: http://10.0.10.50 # Route to the Nginx Ingress Controller on your master node
   - service: http_status:404
-Create DNS record and run as a service:
+```
 
-Bash
+- Create DNS record and run as a service:
 
-cloudflared tunnel route dns k3s-tunnel hello.sr-one.net
+```Bash
+
+cloudflared tunnel route dns k3s-tunnel <CNAME>.<DOMAIN_NAME>
 sudo cloudflared --config /etc/cloudflared/config.yml service install
-Phase 5: Deploying Your PHP Web Page
+```
+
+# Phase 5: Deploying Your PHP Web Page
 This final step uses a single YAML file to deploy a simple PHP web page to your cluster. It uses a single container image that includes both Nginx and a PHP interpreter.
 
-On debGold:
+On Primary:
 
-Create the YAML file (nano php-web-simple.yaml).
-(Use the exact code provided in our conversation, ensuring the image tag is updated to a recent, valid version like webdevops/php-nginx:8.3-alpine).
+Create the YAML file (```nano php-web-simple.yaml```).
+```YAML
+---
+# 1. The ConfigMap: This holds our simple PHP file.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: php-files-cm
+data:
+  index.php: |
+    <?php
+    echo "<h1>Hello from PHP!</h1>";
+    echo "This page was served from the debGold and debBlue cluster.";
+    echo "<br>";
+    echo "The current time is " . date("Y-m-d H:i:s");
+    ?>
 
-Delete the old hello-web resources:
+---
+# 2. The Deployment: Using a single image that combines Nginx and PHP.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: php-web-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: php-web
+  template:
+    metadata:
+      labels:
+        app: php-web
+    spec:
+      volumes:
+        - name: php-code
+          configMap:
+            name: php-files-cm
+      containers:
+      - name: php-container
+        image: webdevops/php-nginx:alpine-3.1
+        ports:
+          - containerPort: 80
+        volumeMounts:
+          - name: php-code
+            mountPath: /app/index.php
+            subPath: index.php
+        env:
+        - name: WEB_DOCUMENT_ROOT
+          value: "/app"
+        
+---
+# 3. The Service: Exposes our Deployment.
+apiVersion: v1
+kind: Service
+metadata:
+  name: php-web-service
+spec:
+  selector:
+    app: php-web
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
 
-Bash
+---
+# 4. The Ingress: Exposes our Service to the world.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: php-web-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: hello.sr-one.net
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: php-web-service
+            port:
+              number: 80
+```
+
+- Delete the old hello-web resources:
+
+```Bash
 
 sudo kubectl delete deployment hello-web-deployment
 sudo kubectl delete service hello-web-service
 sudo kubectl delete ingress hello-web-ingress
-Apply the new manifest:
+```
 
-Bash
+3. Apply the new manifest:
+
+```Bash
 
 sudo kubectl apply -f php-web-simple.yaml
-Your cluster will now pull the new image and deploy your PHP-powered website.
+```
+- Your cluster will now pull the new image and deploy your PHP-powered website.
 
-Congratulations on successfully building a resilient, multi-node Kubernetes cluster!
+Adding a Second Website to the existing cluster
 
+1. Create a new YAML file (e.g., blog-web.yaml) with a new set of resources for your second website. Use different names and a new hostname in the Ingress rule.
 
-
-
-
-
-
-Okay, I thought of something else, before I forget...sorry! If I wanted to use this cluster to create other pods, that wouldn't be a problem right? Instead of just deleting all of this, I could just build new pods to run a new web page, or app, or whatever, right?
-
-
-
-That is an excellent and absolutely correct assumption! You are thinking like a true Kubernetes user.
-
-This is the entire point of a Kubernetes cluster: to serve as a shared platform for running multiple applications. You don't have to delete your first website to create a second one.
-
-The Nginx Ingress Controller, which we set up, is designed specifically for this purpose. It acts as a single point of entry that routes traffic to different applications based on the hostname.
-
-You can run dozens, or even hundreds, of different web pages and applications on this same cluster.
-
-A Concrete Example: Adding a Second Website
-Let's imagine you want to add a new website at blog.sr-one.net that uses a different application, say, a static HTML site.
-
-Here is what you would do:
-
-Create a new YAML file (e.g., blog-web.yaml) with a new set of resources for your second website. The only significant change is that you'll use different names and a new hostname in the Ingress rule.
-
-YAML
+```YAML
 
 ---
 # Deployment for your new blog
@@ -418,7 +512,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: blog.sr-one.net
+  - host: <CNAME>.<DOMAIN_NAME>
     http:
       paths:
       - path: /
@@ -428,13 +522,15 @@ spec:
             name: blog-service
             port:
               number: 80
-Apply the new manifest. You don't delete anything; you just add the new application.
+```
+2. Apply the new manifest, Don't delete anything; just add the new application.
 
-Bash
+```Bash
 
 sudo kubectl apply -f blog-web.yaml
-Add a new CNAME record to Cloudflare. You will go into your Cloudflare DNS settings and add a new CNAME record for blog.sr-one.net that points to the same tunnel ID as hello.sr-one.net.
+```
+Add a new CNAME record to Cloudflare. Go into your Cloudflare DNS settings and add a new CNAME record for <CNAME>.<DOMAIN_NAME> that points to the same tunnel ID you created above.
 
-Avoid mixing HA experiments with VLAN setup on underpowered switches; it causes most network headaches.
-
-Always test connectivity (ping gateway + external IP) before proceeding to next steps.
+* A Few Tips:
+- Avoid mixing HA experiments with VLAN setup on underpowered switches; it causes most network headaches.
+- Always test connectivity (ping gateway + external IP) before proceeding to next steps.
