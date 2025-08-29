@@ -50,20 +50,7 @@ sudo docker run hello-world
 sudo apt-get install docker-compose-plugin
 ```
 
-5. Install K3s
-```bash
-sudo apt update && sudo apt upgrade -y
-curl -sfL https://get.k3s.io | sh -
-sudo systemctl status k3s
-sudo k3s kubectl get nodes
-```
-
-* To join additional agent nodes:
-```bash
-curl -sfL https://get.k3s.io | K3S_URL=https://myserver:6443 K3S_TOKEN=mynodetoken sh -
-```
-
-6. Firewall: Disable ufw for simplicity
+5. Firewall: Disable ufw for simplicity
 ```bash
 sudo ufw disable
 ```
@@ -75,27 +62,20 @@ ufw allow from 10.42.0.0/16 to any   # Pods
 ufw allow from 10.43.0.0/16 to any   # Services
 ```
 
-7. Install Tailscale VPN for remote access
-```bash
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
-sudo tailscale up --ssh
-```
-
 # Phase 2 – OPNsense & VLAN 10 Setup
 Network Diagram
 ```
-             +---------------------+
-             |      Internet       |
-             |  WAN 192.168.0.x   |
-             +----------+----------+
-                        |
-                 [Switch Ports 2-5]
-                        |
+                 +---------------------+
+                 |      Internet       |
+                 |  WAN 192.168.0.x   |
+                 +----------+----------+
+                            |
+                   [Switch Ports 2-5]
+                            |
                +-----------------------+
                |   Proxmox Host        |
                | vmbr0 -> WAN (enp3s0)|
-               | 192.168.0.218/24      |
+               | 192.168.0.x/24      |
                | Gateway: 192.168.0.1  |
                |                       |
                | vmbr1 -> LAN/VLAN10   |
@@ -124,7 +104,7 @@ VLAN	Ports	  Notes
 # WAN bridge
 auto vmbr0
 iface vmbr0 inet static
-    address 192.168.0.218/24
+    address 192.168.0.x/24
     gateway 192.168.0.1
     bridge-ports enp3s0
     bridge-stp off
@@ -145,7 +125,7 @@ iface vmbr1 inet manual
 # OPNsense Configuration
 
 LAN (vtnet1) = ```10.0.10.1/24```
-WAN (vtnet0) = ```192.168.0.186/24```
+WAN (vtnet0) = ```192.168.0.x/24```
 Only VLAN 10 (Management) is required; VLAN 20 removed.
 
 # Laptop / VM IP Assignments
