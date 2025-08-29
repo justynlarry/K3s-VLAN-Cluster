@@ -380,7 +380,7 @@ spec:
             name: php-files-cm
       containers:
       - name: php-container
-        image: webdevops/php-nginx:alpine-3.1
+        image: webdevops/php-nginx:8.3-alpine
         ports:
           - containerPort: 80
         volumeMounts:
