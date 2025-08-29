@@ -514,3 +514,157 @@ Add a new CNAME record to Cloudflare. Go into your Cloudflare DNS settings and a
 * A Few Tips:
 - Avoid mixing HA experiments with VLAN setup on underpowered switches; it causes most network headaches.
 - Always test connectivity (ping gateway + external IP) before proceeding to next steps.
+
+
+# Creating a more robust web-page using Docker
+
+Use Docker to create a single, self-contained container image that includes everything your website needs:
+- The Nginx web server
+- The PHP interpreter
+- All of your website's files (.php, .html, .css, etc.)
+
+Once a single image has been created, the Kubernetes manifest becomes incredibly simple. Kubernetes doesn't care about your files anymore; it just pulls the image and runs it. This achieves both scalability and portability.
+
+# Workflow: Build Your Own Image
+
+#Step 1: Create A Project Directory
+On your local machine (not on the cluster nodes), create a new folder for your website and put your files inside.
+
+```Bash
+# On your local machine (your laptop or desktop)
+mkdir my-website
+cd my-website
+```
+- Create your files
+```bash
+sudo nano index.php
+sudo nano style.css
+sudo nano otherpage.php
+```
+# Step 2: Create a Dockerfile
+The Dockerfile is a script that tells Docker how to build your image. Create a file named Dockerfile in the root of your my-website folder.
+
+```Bash
+# In your my-website folder
+nano Dockerfile
+```
+- Paste the following into the file. This uses a multi-stage build to create a lean, fast image.
+
+```Dockerfile
+
+# Stage 1: Use a pre-built image with Nginx and PHP-FPM
+FROM webdevops/php-nginx:8.3-alpine
+
+# Stage 2: Copy your website's files into the container
+# The /app directory is the default location for web files in this image
+COPY . /app
+
+# Expose port 80 to the outside world
+EXPOSE 80
+
+# Define the command to start the application
+CMD ["/usr/local/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]
+```
+
+Step 3: Build and Push Your Image
+- Now, you will build the image on your local machine and push it to a public registry (like Docker Hub) so that your K3s cluster can download it.
+
+# On your local machine:
+
+1. Log in to Docker Hub:
+
+```Bash
+docker login
+(Enter your Docker Hub username and password.)
+```
+
+2. Build the image:
+(Replace your-docker-username with your actual username.)
+
+```Bash
+docker build -t your-docker-username/my-website:1.0 .
+```
+
+3. Push the image to Docker Hub:
+
+```Bash
+docker push your-docker-username/my-website:1.0
+```
+# Step 4: Create a Simple Kubernetes Manifest
+Now, your Kubernetes YAML is clean and simple. You just need to tell it to use the new image you created.
+
+On Primary, create a file named my-website-deployment.yaml.
+
+```Bash
+sudo nano my-website-deployment.yaml
+```
+- Paste the following content. Replace your-docker-username with your username.
+
+```YAML
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-website-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: my-website
+  template:
+    metadata:
+      labels:
+        app: my-website
+    spec:
+      containers:
+      - name: my-website-container
+        image: your-docker-username/my-website:1.0 # The image you just pushed
+        ports:
+          - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-website-service
+spec:
+  selector:
+    app: my-website
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-website-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: my-website.sr-one.net # Or whatever hostname you choose
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: my-website-service
+            port:
+              number: 80
+```
+# Step 5: Deploy It All
+The last step is to delete the old resources and deploy your new, professionally-built website.
+
+On Primary:
+
+```Bash
+
+sudo kubectl delete deployment website-deployment
+sudo kubectl delete service website-service
+sudo kubectl delete ingress website-ingress
+sudo kubectl delete configmap website-files
+sudo kubectl delete configmap nginx-config
+
+sudo kubectl apply -f my-website-deployment.yaml
+```
+This workflow is a more robust way to manage applications in Kubernetes. It separates the application code (in the Docker image) from the deployment manifest, which is a key principle of modern DevOps.
