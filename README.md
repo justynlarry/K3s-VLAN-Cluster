@@ -571,21 +571,21 @@ Step 3: Build and Push Your Image
 
 # On your local machine:
 
-1. Log in to Docker Hub:
+# 1. Log in to Docker Hub:
 
 ```Bash
 docker login
 (Enter your Docker Hub username and password.)
 ```
 
-2. Build the image:
+# 2. Build the image:
 (Replace your-docker-username with your actual username.)
 
 ```Bash
 docker build -t your-docker-username/my-website:1.0 .
 ```
 
-3. Push the image to Docker Hub:
+# 3. Push the image to Docker Hub:
 
 ```Bash
 docker push your-docker-username/my-website:1.0
