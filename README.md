@@ -86,7 +86,7 @@ Network Diagram
                           |
    +------------------+-----------+------------------+
    |                             |                  |
-debBlue Laptop             debGold Laptop        OPNsense VM
+Secondary Laptop           Primary Laptop        OPNsense VM
 10.0.10.70/24              10.0.50/24            10.0.10.60/24
 GW: 10.0.10.1              GW: 10.0.10.1         GW: 10.0.10.1
 DNS: 10.0.10.1             DNS: 10.0.10.1        DNS: 10.0.10.1
@@ -130,8 +130,8 @@ Only VLAN 10 (Management) is required; VLAN 20 removed.
 
 # Laptop / VM IP Assignments
 Device	    IP	          Gateway	DNS
-debBlue	    10.0.10.70	   10.0.10.1	10.0.10.1, 1.1.1.1
-debGold	    10.0.10.50	   10.0.10.1	10.0.10.1
+Secondary   10.0.10.70	   10.0.10.1	10.0.10.1, 1.1.1.1
+Primary	    10.0.10.50	   10.0.10.1	10.0.10.1
 Ubuntu VM	  10.0.10.60	   10.0.10.1	10.0.10.1
 
 
@@ -212,7 +212,7 @@ ip addr show $INTERFACE
 ```
 * You should see inet 10.0.10.90 listed as an IP on the interface.
 
-# Phase 2: CNI (Calico) Installation (debGold)
+# Phase 2: CNI (Calico) Installation (Primary)
 The cluster is now installed but is in a non-functional state, waiting for a network plugin. This is the expected and correct behavior. The Calico CNI will provide network connectivity for all pods.
 
 On Primary:
@@ -231,7 +231,7 @@ sudo kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.
 sudo kubectl get nodes
 ```
 
-# Phase 3: Worker Node Installation (debBlue)
+# Phase 3: Worker Node Installation (Secondary)
 Now that the master node is fully configured and operational, you can connect the worker node. We will use the master's private host IP (10.0.10.50) instead of the VIP, which was a point of failure in our troubleshooting.
 
 On Secondary (computer hosting worker node):
@@ -269,12 +269,12 @@ Go back to the master node (Master) and check the status of both nodes.
 sudo kubectl get nodes
 ```
 
-* Both debgold and debblue should now be in a Ready state.
+* Both Primary and Secondary should now be in a Ready state.
 
 # Phase 4: Ingress and Cloudflare Tunnel
 This final phase sets up a secure and production-ready way to expose your applications without opening any ports on your firewall.
 
-On debGold:
+On Primary:
 
 1. Install Nginx Ingress Controller:
 This will handle all incoming HTTP/HTTPS traffic from the internet.
@@ -352,8 +352,8 @@ metadata:
 data:
   index.php: |
     <?php
-    echo "<h1>Hello from PHP!</h1>";
-    echo "This page was served from the debGold and debBlue cluster.";
+    echo "<h1>Hello from you K3s Cluster!</h1>";
+    echo "This page was served from the Master and Primary cluster.";
     echo "<br>";
     echo "The current time is " . date("Y-m-d H:i:s");
     ?>
